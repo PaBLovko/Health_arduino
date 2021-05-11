@@ -92,6 +92,8 @@ class MyTftSettings{
 };
 MyTftSettings myTftSettings;
 
+enum state{pulseState, spoState, cardioState};
+
 class Commands{
   public:
     Commands(){
@@ -293,12 +295,15 @@ bool touchExit(){
   return false;
 }
 
-void sendData(){
-  Serial1.print("Temp:");
-  Serial1.print(analogRead(A7));
+void sendData(int graph, int data, int command){
+  Serial1.print("command:");
+  Serial1.print(command);
   Serial1.print("|");
-  Serial1.print("rand:");
-  Serial1.println(random(100));  //Temp:65|rand:95   
+  Serial1.print("graph:");
+  Serial1.print(graph);
+  Serial1.print("|");
+  Serial1.print("data:");
+  Serial1.println(data);  //Temp:65|rand:95   
 }
 
 bool equlsDelay(String string){
@@ -508,13 +513,19 @@ void cardio_AD8232() {                        // функция работы с 
   uint16_t graphX   = 0;                               // положение текущей    точки графика по оси X
   uint16_t screenW  = tft.width() - 1;            // ширина дисплея
   uint16_t screenH  = tft.height() - 1 - 48;      // высота дисплея
-  while(!touchExit()){
+  uint16_t data = 0;
+  String command;
+  while(1){
     graphX++; 
+//    readCommand(command);
     if(graphX>=screenW)
-      graphX=0;                
-    graphY = map(analogRead(A10),4096,0,0,screenH); // определяем точку графика по оси Y
+      graphX=0;    
+    data = analogRead(A10);
+    graphY = map(data,4096,0,0,screenH); // определяем точку графика по оси Y
     if(!(digitalRead(10) == 1)||(digitalRead(11) == 1)){
+      sendData(data, random(100), cardioState);
       drawPulsation(graphY0, graphY, graphX, screenH);
+//      drawHeartRateValue();
     }else{
       tft.fillScreen(myTftSettings.getBackEnd());
       drawButtonExit();
@@ -639,69 +650,205 @@ void ulse(){
   }
  // delay(200);
 }
+//
+//int medFilt(int value){           // медианный фильтр
+//  const int bufSize=7;            // количество элементов(должно быть нечётным)
+//  static int buf[bufSize];        // массив нескольких последних элементов
+//  static int sortBuf[bufSize];    // массив элементов, который сортируется
+//  static int pos=0;               // текущая позиция в массиве
+//
+//  buf[pos]=value;                 // запись нового значения в массив
+//  pos++;                          // вычисление позиции следующего элемента
+//  if (pos==bufSize) pos=0;
+//  for(int i=0; i<bufSize; i++){   // копирование первого массива во второй
+//    sortBuf[i]=buf[i];
+//  }
+//  for(int i=0; i<bufSize; i++){   // сортировка второго массива 
+//    for(int j=i; j<bufSize; j++){
+//      if(sortBuf[i]<sortBuf[j]){
+//        int k=sortBuf[i];
+//        sortBuf[i]=sortBuf[j];
+//        sortBuf[j]=k;
+//      }
+//    }
+//  }
+//  return sortBuf[(bufSize/2)];    // возвращается средний элемент из отсортированного массива
+//}
+//
+//int avg(int value){                       // вычисление среднего значения
+//  const int bufSize=16;                   // количество значений
+//  static int buf[bufSize];                // массив из последних значений 
+//  static int pos;                         // текущая позиция
+//  static long int sum=0;                  // сумма всех значений
+//  int avg;                                // среднее значение
+//
+//  buf[pos] = value;                       // добавление нового значения
+//  sum += value;                           // его добавление в сумму
+//  avg = sum/bufSize;                      // вычисление среднего значения
+//  if ((sum%bufSize)>=(bufSize/2)) avg++;  // компенсация погрешности целочисленного деления
+//  pos++;                                  // вычисление позиции следующего элемента
+//  if (pos==bufSize) pos=0;
+//  sum -= buf[pos]; // элемент, который будет перезаписан в следующий раз заранее вычитается из суммы 
+//  return avg;
+//}
+//
+//const int bufSize=16;       // размер буфера для вычисления порога
+//int buf[bufSize];           // буфер для вычисления порога
+//int bufPos=0;               // текущая позиция в буфере
+//long int bufSum=0;          // сумма значений в буфере
+//int  threshold=0;           // порог, вычисляемый, как среднее арифметическое значений в буфере 
+//const int hyst=1;  // расстояние до верхнего и нижнего порогов (больше значение - меньше ложных срабатываний и меньше чувствительности)
+//// пропуск некоторого количества замеров 
+//// после пересечения порога
+//int skipDetect=0;           // количество замеров, которые необходимо пропустить
+//const int crossSkip=4;      // пишется в skipDetect после каждого пересечения порога                  
+//int sensorValueLedOn;       // напряжение на датчике при включенном светодиоде
+//int sensorValueLedOff;      // при выключенном светодиоде. фоновая засветка
+//int sensorValue; // значение на датчике с компенсацией фонового освещения по формуле sensorValueLedOff - sensorValueLedOn
+//// начало и конец текущего периода
+//// время записывается при детектировании
+//// пересечения порогового уровня сверху вниз
+//unsigned long prevTime, time;
+//boolean above;              // находилось ли значение предыдущего отсчёта выше порога
+//int pulse;                  // мгновенное значение пульса (количество ударов в минуту)
+//int pulseMed;               // медианное значение пульса
+//int pulseAvg;               // среднее значение пульса
+//void workingWithSensor(){
+//  sensorValueLedOn = analogRead(A7); 
+//  delay(10);
+//  sensorValueLedOff = 1023;
+//  
+//  sensorValue = sensorValueLedOn-sensorValueLedOff;   // компенсация фоновой засветки
+//  
+//  buf[bufPos] = sensorValue;  // запись нового значения в буфер
+//  bufSum += sensorValue;  // прибавление его к сумме
+//
+//  threshold = bufSum/bufSize+1; // вычисление порога(среднее арифметическое всех значений в буфере)
+//
+//  bufPos++;   // вычисление позиции следующего элемента
+//  if (bufPos==bufSize) bufPos=0;
+//  
+//  bufSum -= buf[bufPos];  // элемент, который будет перезаписан в следующий раз, вычитается из суммы заранее
+//  
+//  if (skipDetect==0){  // если не нужно пропускать замеры
+//    // детектирование того, что значение находится выше верхнего порога
+//    if (sensorValue>(threshold+hyst)){
+//      // при пересечении порога детективрование отключается на несколько замеров 
+//      if (!above) skipDetect=crossSkip; 
+//      // показания с датчика теперь выше порога
+//      above=true; 
+//    }
+//    // детективрование того, что значение находится ниже нижнего порога
+//    else if (sensorValue<(threshold-hyst)){
+//      // при пересечении порога сверху вниз происходят вычисления
+//      if (above){
+//        // текущее время становится предыдущим
+//        prevTime = time; 
+//        // текущее время обновляется
+//        time = millis();
+//        // вычисляется мгновенное значение пульса (60 секунд) * 1000 / (период в миллисекундах)
+//        int period = time-prevTime;
+//        pulse = 60000/period;
+//        // компенсация погрешности целочисленного деления
+//        if ((60000%period)>=(60000/2)) pulse++;
+//        
+//        // если значение пульса реалистично, то оно выводится
+//        if ((pulse>=40)&&(pulse<=200)){
+//          // би
+//          // digitalWrite(beepPin, HIGH);
+//          // вывод данных
+//          pulseMed = medFilt(pulse);
+//          pulseAvg = avg(pulseMed);  
+//          Serial.print("Inst: ");
+//          Serial.print(pulse);
+//          Serial.print("; Med: ");
+//          Serial.print(pulseMed);
+//          Serial.print("; Avg: ");
+//          Serial.println(pulseAvg);   
+//          // п
+//          // digitalWrite(beepPin, LOW);
+//          // above = false; на самом деле должно быть не тут
+//        }
+//        // при пересечении порога детективрование отключается на несколько замеров        
+//        skipDetect=crossSkip;
+//      }
+//      above = false;  // последнее значение с датчика ниже порога
+//    }
+//  }else{
+//    skipDetect--; // один замер пропущен, поэтому ещё надо пропустить (на один меньше)
+//  }
+//}
 
-void pulse(){
-  uint16_t graphY0  = 0;                              // положение предыдущей точки графика по оси Y
-  uint16_t graphY   = 0;                               // положение текущей    точки графика по оси Y
-  uint16_t graphX   = 0;                               // положение текущей    точки графика по оси X
-  uint16_t screenW  = tft.width() - 1;            // ширина дисплея
-  uint16_t screenH  = tft.height() - 1 - 48;      // высота дисплея
-  String command;
-  while(1){//!touchExit()
-    graphX++; 
-    readCommand(command);
-    if(graphX>=screenW)
-      graphX=0;                
-    graphY = map(analogRead(A7),1024,0,0,screenH);//sensor_Pulse.check(ISP_ANALOG)
-    if(false){//sensor_Pulse.check(ISP_VALID)==ISP_CHANGED
-      tft.fillScreen(myTftSettings.getBackEnd());
-      drawButtonExit();
-      graphX=0;                                             
-    }
-    if(true){//sensor_Pulse.check(ISP_VALID)==ISP_CONNECTED
-      sendData();
-      drawPulsation(graphY0, graphY, graphX, screenH);
-      drawHeartRateValue();
-      workingOutAdditionalFeaturesInThePulse();
-    }else{
-      drawDisconnect();
-    }
-    graphY0 = graphY;
-    delay(commands.getDelay());
-  }
-  drawButtonsMode();
-}
+ void pulse(){
+   uint16_t graphY0  = 0;                              // положение предыдущей точки графика по оси Y
+   uint16_t graphY   = 0;                               // положение текущей    точки графика по оси Y
+   uint16_t graphX   = 0;                               // положение текущей    точки графика по оси X
+   uint16_t screenW  = tft.width() - 1;            // ширина дисплея
+   uint16_t screenH  = tft.height() - 1 - 48;      // высота дисплея
+   uint16_t data = 0;
+   String command;
+   while(1){//!touchExit()
+     graphX++; 
+     readCommand(command);
+     if(graphX>=screenW)
+       graphX=0;                
+//     data = sensor_Pulse.check(ISP_ANALOG);
+//    delay(20);
+    data = analogRead(A7);
+     graphY = map(data,1024,0,0,screenH);//sensor_Pulse.check(ISP_ANALOG)
+     if(false){//sensor_Pulse.check(ISP_VALID)==ISP_CHANGED
+       tft.fillScreen(myTftSettings.getBackEnd());
+       drawButtonExit();
+       graphX=0;                                             
+     }
+     if(true){//sensor_Pulse.check(ISP_VALID)==ISP_CONNECTED
+       sendData(data, random(100), pulseState);
+       Serial.println(data);
+       drawPulsation(graphY0, graphY, graphX, screenH);
+       drawHeartRateValue();
+       workingOutAdditionalFeaturesInThePulse();
+     }else{
+       drawDisconnect();
+     }
+     graphY0 = graphY;
+//     delay(commands.getDelay());
+   }
+   drawButtonsMode();
+ }
 
-void selectMode(byte button){                //функиця выбора режима работы
-  switch (button)     
-  {
-  case 5:  // Если нажата кнопка "pulse"
-    drawButtonExit();
-    pulse();
-    //pulse();
-    break;
-  case 4:  // Если нажата кнопка "spo"
-    drawButtonExit();
-    //spo_MAX30102();
-    break;  
-  case 3:  // Если нажата кнопка "cardio"
-    drawButtonExit();
-    //cardio_AD8232();
-    break;       
-  }
-}
+ void selectMode(byte button){                //функиця выбора режима работы
+   switch (button)     
+   {
+   case 5:  // Если нажата кнопка "pulse"
+     drawButtonExit();
+     pulse();
+     //pulse();
+     break;
+   case 4:  // Если нажата кнопка "spo"
+     drawButtonExit();
+     spo_MAX30102();
+     break;  
+   case 3:  // Если нажата кнопка "cardio"
+     drawButtonExit();
+     cardio_AD8232();
+     break;       
+   }
+ }
 
 void setup(){
   Serial.begin(9600);
   setupTft();
   //setupRTC(); 
-  setupLed();
-  setupBuzzer();
+  // setupLed();
+  // setupBuzzer();
   setupBluetooth();
   setupSensorPulse();
-  //setupAD8232();                          
-  //setupMAX30102();
+  // setupAD8232();                          
+  setupMAX30102();
   //prevTime = millis();
 }
 
-void loop() { selectMode(getButton(wasTouch())); }
+void loop() { 
+  selectMode(getButton(wasTouch())); 
+//  workingWithSensor();
+}
